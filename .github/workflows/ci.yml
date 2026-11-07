@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: relay
+          POSTGRES_PASSWORD: relay_ci_password
+          POSTGRES_DB: relay
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U relay -d relay"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://relay:relay_ci_password@localhost:5432/relay
+      # CI-only values, not real secrets.
+      JWT_SECRET: ci-access-secret-0123456789abcdef0123456789
+      JWT_REFRESH_SECRET: ci-refresh-secret-fedcba9876543210fedcba98765
+      PAYSTACK_SECRET_KEY: sk_test_ci_placeholder_not_a_real_key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+      - run: npm run typecheck
+      - run: npm run db:migrate -w @relay/api
+      - run: npm run db:seed -w @relay/api
+      - run: npm run db:check -w @relay/api
+      - run: npm test -w @relay/api
+      - run: npm run db:rollback:all -w @relay/api

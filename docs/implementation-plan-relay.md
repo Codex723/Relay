@@ -1,0 +1,35 @@
+# Implementation plan: RELAY
+
+Builds on `trd-relay.md` and `database-schema-relay.md`. The app compiles and runs after every step. Wait for your "go" between steps. Sizes: S, M, L. Steps marked **SIGN-OFF** touch auth, payments or production data.
+
+## Riskiest unknowns first
+1. Race-safe dispatch (steps 8 to 9). 2. Paystack webhook (step 6). 3. Scroll frame-sequence performance (step 14).
+
+## Build sequence
+1. **Monorepo setup (S).** Files: root package.json, `apps/web`, `apps/api`, `packages/shared`, lint and TS config. Verify: `npm run dev` starts both apps. No migration.
+2. **Docker and CI skeleton (S).** Files: `docker-compose.yml`, `.github/workflows/ci.yml`, `.env.example`. Verify: `docker compose up` starts Postgres; CI runs lint and typecheck.
+3. **Database and migrations (M). DONE.** Files: SQL migrations 001 to 005 with up and down, runner, seed script, integrity check script. New dependencies: pg, bcryptjs. Verified: migrations applied, seed read back, integrity checks passed, every rollback run, reapplied. Change from plan: raw SQL migrations instead of Prisma Migrate (no down migrations). Prisma's engine downloads are also blocked in the build sandbox, so Prisma code could not be tested here. Decision: typed data access uses Kysely (approved before step 4).
+4. **Auth and roles (M) SIGN-OFF. DONE.** Data access: Kysely (decided). Files: config validation, Kysely types, token helpers, requireAuth and requireRole middleware, auth routes, shared Zod schemas, error handler, 18 tests. Verified against Postgres: register, login, refresh, logout, me, role guard (403 for customer and rider, 200 for admin), tampered and swapped tokens rejected, generic login errors, malformed JSON gives 400. Not tested: the rate limiter (it is switched off under test).
+5. **Vendors, items and order creation (M). DONE.** Files: vendors routes, orders routes (quote, create, read, mine), server-side pricing, Haversine distance and per-km fee helper, city detection. Verified: 20 new tests (38 total) passing, including client-supplied prices ignored, fee and totals exact, closed vendor, unavailable and foreign items, city mismatch, other customers' orders hidden. Not yet in this step: payment link (step 6). Added beyond the plan: POST /orders/quote. Verify: client-supplied prices are ignored (test).
+6. **Paystack initialize and webhook (L) SIGN-OFF. DONE (tested with a fake Paystack; real Paystack calls not run in the build sandbox).** Added: POST /orders/:id/pay, GET /payments/verify/:reference, rate limits on order creation, pay, verify and webhook (the order-creation limit was missed in step 5), and a rule that only sk_test_ keys work outside production. 15 payment tests (53 total) pass, and three deliberate breaks (accept any amount, no lock or duplicate check, no signature check) each made tests fail. Original plan:  Files: payments routes, HMAC check, idempotency. New dependency: none beyond fetch. Verify: test-mode payment marks PAID; duplicate webhook is a no-op; forged signature rejected; tests for all three.
+7. **Order state machine and audit trail (M). DONE.** Added `transitionOrder` (the only way to change an order's status; the payment code now uses it), the full transition table, rider checks, and migration 006 so audit events keep their real order. 12 new tests (65 total) pass, including all 64 state pairs, five simultaneous identical transitions applied once, and three deliberate breaks (no validity check, no row lock, no event logging) that each made tests fail. No new public routes in this step; rider and admin routes come in steps 9 and 12. Original plan:  Files: transition service, order_events writes. Verify: invalid transitions return 422; every change logged (tests).
+8. **Dispatcher and offers (L). DONE.** Added the dispatcher (nearest eligible rider, 30 s offers, decline and expiry handling, 3-round admin alert, retry wait, background loop, offer right after payment), migration 007, and DISPATCH_* settings. 15 new tests (80 total) pass, including a controllable clock, concurrency cases, and five deliberate breaks (never alert, re-offer the same rider, ignore stale riders, no retry wait, no rider lock) that each made tests fail. Not in this step: the rider-facing routes and socket push (steps 9 and 10), and the admin view of flagged orders (step 12). Original plan:  Files: dispatcher service, nearest-rider query, offer expiry timer. Verify: offers go to nearest free rider; expiry moves to the next; 3 failures alert admin.
+9. **Race-safe accept (M) SIGN-OFF.** Files: accept route with row lock and partial unique index. Verify: concurrent accept test yields exactly one winner.
+10. **Socket.IO tracking and simulator (L).** Files: socket server, rooms, location events, `scripts/simulate-riders.ts`. New dependency: socket.io. Verify: three fake riders move on a test page; clients only receive their own order room.
+11. **Customer web flow (L).** Files: vendor grid, menu, cart, checkout, tracking page. New dependency: Leaflet. Verify: full test-mode order works end to end by hand.
+12. **Rider and admin views (L).** Files: rider app screens, admin dashboard. Verify: rider can accept and complete; admin sees live map and can reassign with audit log entry.
+13. **Security pass (M) SIGN-OFF.** Audit secrets, injection, auth, IDOR, validation, CVEs, rate limits, error leaks; fix criticals, list the rest as tickets with estimates.
+14. **Cinematic landing page (L).** Files: frame extraction script, canvas scroller, intro animation, glass cards. New dependencies: GSAP, Lenis. Verify: Lighthouse mobile 80+, reduced-motion fallback, assets under 15 MB.
+15. **E2E tests with Playwright (M).** Money path first (signup to paid order), one unhappy path per flow (declined payment, expired session, rider timeout), independent tests, traces on failure only. State what is not covered.
+16. **Dead code cleanup and CLAUDE.md (S).** Verify each deletion by search; run build and tests after each; generate CLAUDE.md from the real repo.
+17. **Docs and deploy (M).** README with architecture diagram, state machine, setup, env table; CONTRIBUTING.md; deploy web to Vercel, API to Render, DB on Neon; record a 9:16 demo.
+
+## Commit rules
+Conventional commits, split unrelated changes, subject under 50 characters in imperative mood, body explains why, reference the ticket, never mix refactor with behavior change, never commit secrets or generated files.
+
+## Risks and rollbacks
+- Migration breaks data: run the down script and restore from the Neon branch snapshot taken before step 3.
+- Webhook bug double-charges state: revert the webhook commit; payments are keyed by unique reference so no duplicate rows are possible.
+- Dispatcher loops forever: feature flag `DISPATCH_ENABLED=false` stops offers; admin assigns manually.
+- Frame sequence too heavy on mobile: fall back to the poster frame plus short looping video under 3 MB.
+- Deployment failure: Vercel and Render both support instant rollback to the previous deploy.

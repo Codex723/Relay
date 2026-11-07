@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: relay
+      POSTGRES_PASSWORD: relay_dev_password
+      POSTGRES_DB: relay
+    ports:
+      - "5432:5432"
+    volumes:
+      - relay-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U relay -d relay"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 4000
+      WEB_ORIGIN: http://localhost:3000
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (openssl rand -hex 32)}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET in .env (openssl rand -hex 32)}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:?Set PAYSTACK_SECRET_KEY in .env (a Paystack TEST key, sk_test_...)}
+      DATABASE_URL: postgresql://relay:relay_dev_password@db:5432/relay
+      DIRECT_URL: postgresql://relay:relay_dev_password@db:5432/relay
+    ports:
+      - "4000:4000"
+
+volumes:
+  relay-db:
