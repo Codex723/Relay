@@ -12,6 +12,7 @@ const app = createApp({
   db,
   config,
   paystack: createPaystackClient(config),
+  dispatcher,
   // Offer to a rider immediately after payment instead of waiting for the next dispatcher tick.
   onOrderPaid: (orderId) => {
     if (config.DISPATCH_ENABLED) dispatcher.dispatchOrder(orderId).catch((err) => console.error("dispatch failed", err));

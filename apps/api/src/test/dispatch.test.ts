@@ -401,7 +401,7 @@ describe("background loop and payment hook-up", () => {
   it("a paid order is offered to a rider straight away, without waiting for a tick", async () => {
     const d = createDispatcher({ db, config });
     const fake = createFakePaystack();
-    const app = createApp({ db, config, paystack: fake.client, onOrderPaid: (id) => void d.dispatchOrder(id) });
+    const app = createApp({ db, config, dispatcher: createDispatcher({ db, config }), paystack: fake.client, onOrderPaid: (id) => void d.dispatchOrder(id) });
     const rider = await mkRider({ real: true });
 
     const email = `test-dp-pay-${run}@relay.test`;

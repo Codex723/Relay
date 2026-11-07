@@ -51,6 +51,11 @@ Portfolio-grade delivery platform used by three roles; must show payments, real-
 - Concurrency: the order and the chosen rider are locked while an offer is created, so one order never gets two open offers and one rider never holds two.
 - A background loop runs every 2 s to expire offers and to pick up orders that are due, so nothing depends on in-memory timers and a restart loses nothing. An order is also offered immediately after payment. `DISPATCH_ENABLED=false` switches the loop and the post-payment offer off.
 - Moving an order back to SEARCHING_RIDER (rider dropped, reassigned) resets its dispatch record.
+- **Accepting an offer:** locks are always taken in the order rider, then order, then offer, so simultaneous accepts are processed one at a time and cannot deadlock. The accept succeeds only if the offer belongs to the caller (else 404), is still PENDING (else 409 OFFER_NOT_PENDING), has not expired (else 409 OFFER_EXPIRED) and the order is still SEARCHING_RIDER (else 409 ORDER_NOT_AVAILABLE, and the offer is closed). A rider who already has an ASSIGNED or PICKED_UP order gets 409 RIDER_BUSY.
+- On success the order becomes ASSIGNED to the rider (audit entry with the rider as actor), the offer becomes ACCEPTED, and every other open offer for that order, and that rider's open offers on other orders, are closed. The other orders are not charged a failed round.
+- Given two simultaneous accepts, exactly one gets 200 and the other 409. This holds for the same rider tapping twice, two riders holding offers on one order, and one rider holding offers on two orders.
+- Declining uses the same rules as expiry for counting the round and offers the next rider straight away.
+- A rider updates an order only if it is assigned to them (other orders return 404, like a missing order) and only to PICKED_UP or DELIVERED. Cancelling and reassigning are not available to riders. Out-of-order moves return 422.
 - Given an accept, when the offer is PENDING and unexpired, then order becomes ASSIGNED under a row lock; other offers are cancelled.
 - Given two simultaneous accepts, then exactly one succeeds and the other gets 409.
 - Given decline or expiry, then the next nearest rider is offered; after 3 rounds the admin is alerted.
@@ -82,7 +87,7 @@ All responses JSON. Errors: `{ "error": { "code": string, "message": string } }`
 - Public: GET /vendors (optional `?city=ABUJA|LAGOS`, includes closed vendors flagged `isOpen: false`), GET /vendors/:id/items (includes unavailable items flagged)
 - Customer: POST /orders/quote (prices a cart without creating an order), POST /orders, GET /orders/:id, GET /orders/mine. Someone else's order returns 404, not 403, so ids cannot be probed.
 - Payments: POST /orders/:id/pay (customer), POST /payments/webhook, GET /payments/verify/:reference
-- Rider: POST /rider/online, POST /rider/offline, POST /rider/location, POST /rider/offers/:id/accept, POST /rider/offers/:id/decline, POST /rider/orders/:id/status
+- Rider (RIDER role only): POST /rider/online (needs a location), POST /rider/offline, POST /rider/location, GET /rider/offers/current and GET /rider/orders/current (polling fallback for when the live connection is down), POST /rider/offers/:id/accept, POST /rider/offers/:id/decline, POST /rider/orders/:id/status (body `{status: PICKED_UP | DELIVERED}` only)
 - Admin: GET /admin/orders, POST /admin/orders/:id/assign, GET /admin/stats
 Request and response schemas live in `packages/shared` as Zod types and are published as OpenAPI.
 

@@ -7,21 +7,24 @@ import { authRouter } from "./auth/routes";
 import type { Config } from "./config";
 import type { Database } from "./db";
 import { errorHandler, sendError } from "./http";
+import type { Dispatcher } from "./dispatch/dispatcher";
 import { ordersRouter } from "./orders/routes";
 import { paymentsRouter } from "./payments/routes";
 import type { PaystackClient } from "./payments/paystack";
+import { riderRouter } from "./rider/routes";
 import { vendorsRouter } from "./vendors/routes";
 
 export interface AppDeps {
   db: Database;
   config: Config;
   paystack: PaystackClient;
+  dispatcher: Dispatcher;
   /** Called after an order has been paid and is ready for a rider. */
   onOrderPaid?: (orderId: string) => void;
 }
 
 // `extend` lets tests (and later steps) mount extra routes before the 404 and error handlers.
-export function createApp({ db, config, paystack, onOrderPaid }: AppDeps, extend?: (app: Express) => void): Express {
+export function createApp({ db, config, paystack, dispatcher, onOrderPaid }: AppDeps, extend?: (app: Express) => void): Express {
   const app = express();
   if (config.NODE_ENV === "production") app.set("trust proxy", 1);
 
@@ -41,6 +44,7 @@ export function createApp({ db, config, paystack, onOrderPaid }: AppDeps, extend
   app.use("/auth", authRouter(db, config));
   app.use("/vendors", vendorsRouter(db));
   app.use("/orders", ordersRouter(db, config, paystack));
+  app.use("/rider", riderRouter(db, config, dispatcher));
   extend?.(app);
 
   app.use((_req, res) => void sendError(res, 404, "NOT_FOUND", "Route not found."));

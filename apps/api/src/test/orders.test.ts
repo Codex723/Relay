@@ -4,11 +4,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../app";
 import { loadConfig } from "../config";
 import { createDb } from "../db";
+import { createDispatcher } from "../dispatch/dispatcher";
 import { createFakePaystack } from "./fakePaystack";
 
 const config = loadConfig({ ...process.env, DATABASE_URL: process.env.DATABASE_URL ?? "" });
 const db = createDb(config.DATABASE_URL);
-const app = createApp({ db, config, paystack: createFakePaystack().client });
+const app = createApp({ db, config, dispatcher: createDispatcher({ db, config }), paystack: createFakePaystack().client });
 
 const run = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
 const PASSWORD = "a-long-test-password";

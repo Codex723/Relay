@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../app";
 import { loadConfig } from "../config";
 import { createDb } from "../db";
+import { createDispatcher } from "../dispatch/dispatcher";
 import type { OrderStatusName } from "../db/types";
 import { ALLOWED_TRANSITIONS, canTransition, transitionOrder } from "../orders/transitions";
 import { createFakePaystack } from "./fakePaystack";
@@ -11,7 +12,7 @@ const config = loadConfig({ ...process.env, DATABASE_URL: process.env.DATABASE_U
 const db = createDb(config.DATABASE_URL);
 
 // Test-only route so the state machine can be exercised over HTTP (real routes arrive in later steps).
-const app = createApp({ db, config, paystack: createFakePaystack().client }, (a) => {
+const app = createApp({ db, config, dispatcher: createDispatcher({ db, config }), paystack: createFakePaystack().client }, (a) => {
   a.post("/test/orders/:id/transition", async (req, res, next) => {
     try {
       const { to, riderId, actorId } = req.body as { to: OrderStatusName; riderId?: string; actorId?: string };

@@ -130,3 +130,37 @@ export const PaymentInit = z.object({
   reference: z.string(),
 });
 export type PaymentInit = z.infer<typeof PaymentInit>;
+
+// ---- Rider ----
+export const LocationInput = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+});
+export type LocationInput = z.infer<typeof LocationInput>;
+
+// Riders can only move an order forward to these two states. Everything else is done by the system or an admin.
+export const RiderOrderStatusInput = z.object({ status: z.enum(["PICKED_UP", "DELIVERED"]) });
+export type RiderOrderStatusInput = z.infer<typeof RiderOrderStatusInput>;
+
+export const RiderOrderView = z.object({
+  id: z.string().uuid(),
+  status: OrderStatus,
+  vendorName: z.string(),
+  vendorAddress: z.string().nullable(),
+  vendorLat: z.number(),
+  vendorLng: z.number(),
+  dropAddress: z.string(),
+  dropLat: z.number(),
+  dropLng: z.number(),
+  distanceM: z.number().int(),
+  deliveryFeeKobo: z.number().int(),
+  items: z.array(z.object({ name: z.string(), quantity: z.number().int() })),
+});
+export type RiderOrderView = z.infer<typeof RiderOrderView>;
+
+export const RiderOfferView = z.object({
+  offerId: z.string().uuid(),
+  expiresAt: z.string(),
+  order: RiderOrderView,
+});
+export type RiderOfferView = z.infer<typeof RiderOfferView>;

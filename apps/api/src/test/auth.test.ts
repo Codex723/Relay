@@ -5,11 +5,12 @@ import { requireAuth, requireRole } from "../auth/middleware";
 import { createApp } from "../app";
 import { loadConfig } from "../config";
 import { createDb } from "../db";
+import { createDispatcher } from "../dispatch/dispatcher";
 import { createFakePaystack } from "./fakePaystack";
 
 const config = loadConfig({ ...process.env, DATABASE_URL: process.env.DATABASE_URL ?? "" });
 const db = createDb(config.DATABASE_URL);
-const app = createApp({ db, config, paystack: createFakePaystack().client }, (a) => {
+const app = createApp({ db, config, dispatcher: createDispatcher({ db, config }), paystack: createFakePaystack().client }, (a) => {
   // Test-only routes that exercise the role guard.
   a.get("/test/admin-only", requireAuth(config), requireRole("ADMIN"), (_req, res) => void res.json({ ok: true }));
   a.get("/test/rider-or-admin", requireAuth(config), requireRole("RIDER", "ADMIN"), (_req, res) => void res.json({ ok: true }));

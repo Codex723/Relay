@@ -43,6 +43,9 @@ Paystack test cards are listed in Paystack's docs. Payments are only trusted aft
 ## Dispatch
 When an order is paid it is offered to the nearest eligible rider for 30 seconds. An offer that is declined or expires, or a moment with no rider available, counts as a failed round; after 3 failed rounds the order is flagged for an admin (`orders.dispatch_alerted_at`) and automatic offers stop. See the DISPATCH_* settings in `.env.example`. Set `DISPATCH_ENABLED=false` to turn it off.
 
+## Rider API
+All under `/rider`, RIDER role only: `POST /online` (with `{lat, lng}`), `POST /offline`, `POST /location`, `GET /offers/current`, `POST /offers/:id/accept`, `POST /offers/:id/decline`, `GET /orders/current`, `POST /orders/:id/status` (`{status: "PICKED_UP" | "DELIVERED"}`). Accepting is race-safe: of any number of simultaneous accepts, exactly one wins.
+
 ## Order status changes
 All status changes go through `transitionOrder` in `apps/api/src/orders/transitions.ts`; the allowed transitions are listed in `docs/trd-relay.md`. Never update `orders.status` directly.
 

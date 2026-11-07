@@ -4,6 +4,7 @@ import type { Database } from "../db";
 import type { DB } from "../db/types";
 import { HttpError } from "../http";
 import { haversineMeters } from "../orders/pricing";
+import { transitionOrder } from "../orders/transitions";
 
 export interface OfferNotice {
   offerId: string;
@@ -38,6 +39,7 @@ export interface DispatcherDeps {
 export interface Dispatcher {
   dispatchOrder(orderId: string): Promise<DispatchResult>;
   declineOffer(offerId: string, riderId: string): Promise<{ orderId: string; alerted: boolean }>;
+  acceptOffer(offerId: string, riderId: string): Promise<{ orderId: string }>;
   expireOffers(): Promise<number>;
   resetDispatch(orderId: string): Promise<void>;
   tick(): Promise<void>;
@@ -250,6 +252,46 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
     return outcome;
   }
 
+  // A rider accepts an offer. Locks are always taken in the same order (rider, then order, then offer), so
+  // simultaneous accepts are handled one after another and can never deadlock or both win. The offer must still
+  // be open and unexpired and the order must still be searching. The winner's other open offers are closed.
+  async function acceptOffer(offerId: string, riderId: string): Promise<{ orderId: string }> {
+    const now = clock();
+    const outcome = await db.transaction().execute(async (trx) => {
+      const probe = await trx.selectFrom("dispatch_offers").select(["order_id", "rider_id"]).where("id", "=", offerId).executeTakeFirst();
+      if (!probe || probe.rider_id !== riderId) throw new HttpError(404, "OFFER_NOT_FOUND", "Offer not found.");
+
+      const rider = await trx.selectFrom("riders").select("user_id").where("user_id", "=", riderId).forUpdate().executeTakeFirst();
+      if (!rider) throw new HttpError(409, "NOT_A_RIDER", "This account has no rider profile.");
+      const order = await trx.selectFrom("orders").select(["id", "status"]).where("id", "=", probe.order_id).forUpdate().executeTakeFirstOrThrow();
+      const offer = await trx.selectFrom("dispatch_offers").select(["id", "status", "expires_at"]).where("id", "=", offerId).forUpdate().executeTakeFirstOrThrow();
+
+      if (offer.status !== "PENDING") throw new HttpError(409, "OFFER_NOT_PENDING", "This offer is no longer open.");
+      if (offer.expires_at <= now) throw new HttpError(409, "OFFER_EXPIRED", "This offer has expired.");
+      if (order.status !== "SEARCHING_RIDER") {
+        // The order was cancelled or taken while the offer was open. Close the offer, then report it below
+        // (throwing here would roll the close back).
+        await trx.updateTable("dispatch_offers").set({ status: "EXPIRED" }).where("id", "=", offerId).execute();
+        return { assigned: false as const };
+      }
+
+      await transitionOrder(trx, { orderId: order.id, to: "ASSIGNED", actorId: riderId, riderId });
+      await trx.updateTable("dispatch_offers").set({ status: "ACCEPTED" }).where("id", "=", offerId).execute();
+      // Close every other open offer for this order, and this rider's open offers for other orders. Those orders
+      // are not charged a failed round: the rider did not refuse them, they were simply no longer free.
+      await trx
+        .updateTable("dispatch_offers")
+        .set({ status: "EXPIRED" })
+        .where("status", "=", "PENDING")
+        .where("id", "!=", offerId)
+        .where((eb) => eb.or([eb("order_id", "=", order.id), eb("rider_id", "=", riderId)]))
+        .execute();
+      return { assigned: true as const, orderId: order.id };
+    });
+    if (!outcome.assigned) throw new HttpError(409, "ORDER_NOT_AVAILABLE", "This order is no longer available.");
+    return { orderId: outcome.orderId };
+  }
+
   async function expireOffers(): Promise<number> {
     const due = await db
       .selectFrom("dispatch_offers")
@@ -312,6 +354,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
   return {
     dispatchOrder,
     declineOffer,
+    acceptOffer,
     expireOffers,
     resetDispatch,
     tick,
