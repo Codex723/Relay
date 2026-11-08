@@ -7,6 +7,7 @@ import type { Database } from "../db";
 import { HttpError, asyncHandler } from "../http";
 import { startPayment } from "../payments/service";
 import type { PaystackClient } from "../payments/paystack";
+import type { Realtime } from "../realtime/realtime";
 import { makeLimiter } from "../rateLimit";
 import { priceCart } from "./service";
 
@@ -41,7 +42,7 @@ async function loadOrderView(db: Database, orderId: string): Promise<OrderView |
   };
 }
 
-export function ordersRouter(db: Database, config: Config, paystack: PaystackClient): Router {
+export function ordersRouter(db: Database, config: Config, paystack: PaystackClient, realtime: Realtime): Router {
   const router = Router();
   router.use(requireAuth(config));
   const createLimiter = makeLimiter(config, 60_000, 20);
@@ -102,6 +103,7 @@ export function ordersRouter(db: Database, config: Config, paystack: PaystackCli
       const order = (await loadOrderView(db, orderId))!;
       const customer = await db.selectFrom("users").select("email").where("id", "=", customerId).executeTakeFirstOrThrow();
       const payment = await startPayment(db, paystack, config, { id: order.id, totalKobo: order.totalKobo, email: customer.email });
+      realtime.orderChanged(order.id);
       res.status(201).json({ order, payment });
     }),
   );

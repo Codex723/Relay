@@ -78,8 +78,14 @@ Portfolio-grade delivery platform used by three roles; must show payments, real-
 **Delivery**
 - Given the assigned rider, when marking PICKED_UP then DELIVERED, then transitions are accepted only in order; any other attempt returns 422.
 
-**Tracking**
-- Given an active order, rider location events are broadcast to `order:{id}` at most every 3 s; clients receive only their own order's room.
+**Tracking and live updates (Socket.IO, same server and port as the API)**
+- A socket must present a valid access token in the handshake (not in the URL). Refresh tokens and malformed tokens are refused. The server closes the socket when the token expires; the client reconnects with a new one.
+- Clients can never join a room by name. The server puts the customer and the assigned rider into `order:<id>` whenever the order changes, and puts customers and riders back into the rooms of their open orders when they reconnect. `order:subscribe {orderId}` succeeds only for the order's customer, its assigned rider, or an admin, and answers NOT_FOUND for anything else (missing and not-yours look the same). At most 25 rooms per socket.
+- `order:status {orderId, status, updatedAt}` goes to the order room and to admins, once per socket. A rider who is no longer assigned is told and then removed from the room.
+- `offer:new` (the rider offer view) goes only to the rider the offer was made to. `admin:alert` goes only to admins.
+- `rider:location`: a rider sends `{lat, lng}` over the socket (at most one per second per socket) or over HTTP. Both save the position. Broadcasts are throttled to one per rider per 3 s (`REALTIME_LOCATION_THROTTLE_MS`); the database always has the latest position. Admins receive `{riderId, orderId, lat, lng, at}` for every rider; the customer of the rider's active order receives `{orderId, lat, lng, at}` without the rider's identity. Only riders can send location events.
+- If the live connection is down, clients fall back to polling `GET /rider/offers/current`, `GET /rider/orders/current` and `GET /orders/:id`.
+- Live pushes are sent after the database change is committed, so a client never hears about something that was rolled back. If the server restarts, clients simply reconnect.
 
 ## API contract
 All responses JSON. Errors: `{ "error": { "code": string, "message": string } }`. Status codes: 200, 201, 401, 403, 404, 409, 422, 429, 500.

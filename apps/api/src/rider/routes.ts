@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { LocationInput, RiderOrderStatusInput, type RiderOfferView, type RiderOrderView } from "@relay/shared";
+import { LocationInput, RiderOrderStatusInput, type RiderOfferView } from "@relay/shared";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../auth/middleware";
 import type { Config } from "../config";
@@ -8,53 +8,13 @@ import type { Dispatcher } from "../dispatch/dispatcher";
 import { HttpError, asyncHandler } from "../http";
 import { transitionOrder } from "../orders/transitions";
 import { makeLimiter } from "../rateLimit";
+import type { Realtime } from "../realtime/realtime";
+import { updateRiderLocation } from "./presence";
+import { loadRiderOrderView } from "./view";
 
 const idSchema = z.string().uuid();
 
-async function loadRiderOrderView(db: Database, orderId: string): Promise<RiderOrderView | null> {
-  const o = await db
-    .selectFrom("orders")
-    .innerJoin("vendors", "vendors.id", "orders.vendor_id")
-    .select([
-      "orders.id",
-      "orders.status",
-      "orders.drop_address",
-      "orders.drop_lat",
-      "orders.drop_lng",
-      "orders.distance_m",
-      "orders.delivery_fee_kobo",
-      "vendors.name as vendor_name",
-      "vendors.address as vendor_address",
-      "vendors.lat as vendor_lat",
-      "vendors.lng as vendor_lng",
-    ])
-    .where("orders.id", "=", orderId)
-    .executeTakeFirst();
-  if (!o) return null;
-  const items = await db
-    .selectFrom("order_items")
-    .innerJoin("items", "items.id", "order_items.item_id")
-    .select(["items.name", "order_items.quantity"])
-    .where("order_items.order_id", "=", orderId)
-    .orderBy("items.name")
-    .execute();
-  return {
-    id: o.id,
-    status: o.status,
-    vendorName: o.vendor_name,
-    vendorAddress: o.vendor_address,
-    vendorLat: Number(o.vendor_lat),
-    vendorLng: Number(o.vendor_lng),
-    dropAddress: o.drop_address,
-    dropLat: Number(o.drop_lat),
-    dropLng: Number(o.drop_lng),
-    distanceM: o.distance_m,
-    deliveryFeeKobo: o.delivery_fee_kobo,
-    items,
-  };
-}
-
-export function riderRouter(db: Database, config: Config, dispatcher: Dispatcher): Router {
+export function riderRouter(db: Database, config: Config, dispatcher: Dispatcher, realtime: Realtime): Router {
   const router = Router();
   router.use(requireAuth(config), requireRole("RIDER"));
   const locationLimiter = makeLimiter(config, 60_000, 120);
@@ -89,7 +49,7 @@ export function riderRouter(db: Database, config: Config, dispatcher: Dispatcher
     locationLimiter,
     asyncHandler(async (req, res) => {
       const { lat, lng } = LocationInput.parse(req.body);
-      await setPresence(req.auth!.userId, { current_lat: lat, current_lng: lng });
+      await updateRiderLocation(db, realtime, req.auth!.userId, lat, lng);
       res.json({ ok: true });
     }),
   );
@@ -119,6 +79,7 @@ export function riderRouter(db: Database, config: Config, dispatcher: Dispatcher
       const id = idSchema.safeParse(req.params.id);
       if (!id.success) throw new HttpError(404, "OFFER_NOT_FOUND", "Offer not found.");
       const { orderId } = await dispatcher.acceptOffer(id.data, req.auth!.userId);
+      realtime.orderChanged(orderId);
       res.json({ order: await loadRiderOrderView(db, orderId) });
     }),
   );
@@ -159,6 +120,7 @@ export function riderRouter(db: Database, config: Config, dispatcher: Dispatcher
         if (!order || order.rider_id !== riderId) throw new HttpError(404, "ORDER_NOT_FOUND", "Order not found.");
         await transitionOrder(trx, { orderId: order.id, to: status, actorId: riderId });
       });
+      realtime.orderChanged(id.data);
       res.json({ order: await loadRiderOrderView(db, id.data) });
     }),
   );

@@ -40,6 +40,21 @@ Admin accounts are never created through the API; the seed creates `admin@relay.
 
 Paystack test cards are listed in Paystack's docs. Payments are only trusted after the webhook signature and exact amount are verified.
 
+## Live updates (Socket.IO)
+The API serves Socket.IO on the same port. Connect with `io(API_URL, { auth: { token: <access token> } })`; the connection is closed when the access token expires, so reconnect with a fresh one.
+- Customers receive `order:status` and `rider:location` (position only, never who the rider is) for their own open orders.
+- Riders receive `offer:new` and `order:status` for their own offers and assigned order, and can send `rider:location` `{lat, lng}`.
+- Admins receive every `order:status`, every `rider:location` (with the rider id), and `admin:alert`.
+- `order:subscribe` `{orderId}` joins an order's room if the caller is allowed to see it. Nobody can join a room by name.
+
+### Try it
+```bash
+npm run dev                                          # API on :4000
+npm run sim -w @relay/api -- --riders 3 --auto       # fake riders that accept offers and deliver
+npm run demo:order -w @relay/api                     # places and "pays" an order, prints the live updates
+```
+Open `http://localhost:4000/dev/live` to watch the riders move on a simple map (development only; log in with the seeded admin). Both scripts use the seeded demo accounts, so run `npm run db:seed -w @relay/api` first.
+
 ## Dispatch
 When an order is paid it is offered to the nearest eligible rider for 30 seconds. An offer that is declined or expires, or a moment with no rider available, counts as a failed round; after 3 failed rounds the order is flagged for an admin (`orders.dispatch_alerted_at`) and automatic offers stop. See the DISPATCH_* settings in `.env.example`. Set `DISPATCH_ENABLED=false` to turn it off.
 

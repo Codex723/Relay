@@ -18,6 +18,8 @@ const schema = z
     DISPATCH_MAX_ROUNDS: z.coerce.number().int().positive().default(3),
     DISPATCH_MAX_PICKUP_KM: z.coerce.number().positive().default(15),
     DISPATCH_RIDER_STALE_SECONDS: z.coerce.number().int().positive().default(120),
+    // Minimum time between live location broadcasts for one rider.
+    REALTIME_LOCATION_THROTTLE_MS: z.coerce.number().int().min(0).default(3000),
     // Delivery fee = max(MIN, BASE + PER_KM * km), in kobo. Defaults: 500 + 150 per km, minimum 800 naira.
     DELIVERY_BASE_FEE_KOBO: z.coerce.number().int().min(0).default(50000),
     DELIVERY_PER_KM_KOBO: z.coerce.number().int().min(0).default(15000),

@@ -29,6 +29,8 @@ export function signRefreshToken(user: TokenSubject, config: Config): string {
 export interface AccessClaims {
   userId: string;
   role: Role;
+  /** When the token expires, in milliseconds since the epoch. */
+  expiresAt: number;
 }
 
 export function verifyAccessToken(token: string, config: Config): AccessClaims | null {
@@ -36,7 +38,8 @@ export function verifyAccessToken(token: string, config: Config): AccessClaims |
     const p = jwt.verify(token, config.JWT_SECRET, { algorithms: ["HS256"] });
     if (typeof p === "string" || p.typ !== "access" || typeof p.sub !== "string") return null;
     if (p.role !== "CUSTOMER" && p.role !== "RIDER" && p.role !== "ADMIN") return null;
-    return { userId: p.sub, role: p.role };
+    if (typeof p.exp !== "number") return null;
+    return { userId: p.sub, role: p.role, expiresAt: p.exp * 1000 };
   } catch {
     return null;
   }

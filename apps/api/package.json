@@ -13,7 +13,9 @@
     "db:status": "tsx scripts/db.ts status",
     "db:seed": "tsx scripts/seed.ts",
     "db:check": "tsx scripts/db-check.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "sim": "tsx scripts/simulate-riders.ts",
+    "demo:order": "tsx scripts/demo-order.ts"
   },
   "dependencies": {
     "@relay/shared": "*",
@@ -25,7 +27,8 @@
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "kysely": "^0.29.8",
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "socket.io": "^4.8.4"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
@@ -35,6 +38,7 @@
     "@types/node": "^22.8.0",
     "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",
+    "socket.io-client": "^4.8.4",
     "supertest": "^7.3.1",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
