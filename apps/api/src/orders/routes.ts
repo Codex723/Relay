@@ -14,7 +14,13 @@ import { priceCart } from "./service";
 const idSchema = z.string().uuid();
 
 async function loadOrderView(db: Database, orderId: string): Promise<OrderView | null> {
-  const order = await db.selectFrom("orders").selectAll().where("id", "=", orderId).executeTakeFirst();
+  const order = await db
+    .selectFrom("orders")
+    .innerJoin("vendors", "vendors.id", "orders.vendor_id")
+    .selectAll("orders")
+    .select(["vendors.name as vendor_name", "vendors.lat as vendor_lat", "vendors.lng as vendor_lng"])
+    .where("orders.id", "=", orderId)
+    .executeTakeFirst();
   if (!order) return null;
   const lines = await db
     .selectFrom("order_items")
@@ -38,6 +44,11 @@ async function loadOrderView(db: Database, orderId: string): Promise<OrderView |
     totalKobo: order.total_kobo,
     distanceM: order.distance_m,
     dropAddress: order.drop_address,
+    dropLat: Number(order.drop_lat),
+    dropLng: Number(order.drop_lng),
+    vendorName: order.vendor_name,
+    vendorLat: Number(order.vendor_lat),
+    vendorLng: Number(order.vendor_lng),
     createdAt: order.created_at.toISOString(),
   };
 }

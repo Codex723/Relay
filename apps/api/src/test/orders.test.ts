@@ -137,6 +137,8 @@ describe("create order", () => {
     expect(o.distanceM).toBe(10000);
     expect(o.deliveryFeeKobo).toBe(200000); // 50,000 base + 10 km x 15,000
     expect(o.totalKobo).toBe(780000 + 200000);
+    // The order view carries what the tracking map needs.
+    expect(o).toMatchObject({ vendorName: `Test Open ${run}`, vendorLat: VENDOR.lat, vendorLng: VENDOR.lng, dropLat: NEAR_DROP.dropLat, dropLng: NEAR_DROP.dropLng });
     expect(o.lines).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ itemId: itemA, quantity: 2, unitPriceKobo: 350000 }),

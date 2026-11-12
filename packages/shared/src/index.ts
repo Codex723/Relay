@@ -120,6 +120,11 @@ export const OrderView = QuoteView.extend({
   id: z.string().uuid(),
   status: OrderStatus,
   dropAddress: z.string(),
+  dropLat: z.number(),
+  dropLng: z.number(),
+  vendorName: z.string(),
+  vendorLat: z.number(),
+  vendorLng: z.number(),
   createdAt: z.string(),
 });
 export type OrderView = z.infer<typeof OrderView>;

@@ -40,6 +40,7 @@ jobs:
         env:
           NEXT_TELEMETRY_DISABLED: "1"
       - run: npm run typecheck
+      - run: npm test -w @relay/web
       - run: npm run db:migrate -w @relay/api
       - run: npm run db:seed -w @relay/api
       - run: npm run db:check -w @relay/api

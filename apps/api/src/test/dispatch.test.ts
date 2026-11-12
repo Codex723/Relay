@@ -106,8 +106,8 @@ beforeAll(async () => {
 beforeEach(async () => {
   nowMs = BASE;
   // Retire anything left over from earlier tests so scans (tick) only see this test's data.
-  const riders = userIds.length > 0 ? userIds : ["00000000-0000-4000-8000-000000000000"];
-  await db.updateTable("riders").set({ is_online: false }).where("user_id", "in", riders).execute();
+  // These tests own the database: every rider is taken offline, including demo riders left online by a manual run.
+  await db.updateTable("riders").set({ is_online: false }).execute();
   const old = await db.selectFrom("orders").select("id").where("customer_id", "=", customerId).execute();
   if (old.length > 0) {
     const ids = old.map((o) => o.id);

@@ -104,7 +104,8 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   // Retire leftovers from earlier tests so only this test's riders and orders are in play.
-  if (riderIds.length > 0) await db.updateTable("riders").set({ is_online: false }).where("user_id", "in", riderIds).execute();
+  // These tests own the database: every rider is taken offline, including demo riders left online by a manual run.
+  await db.updateTable("riders").set({ is_online: false }).execute();
   const old = await db.selectFrom("orders").select("id").where("customer_id", "=", customerId).execute();
   if (old.length > 0) {
     const ids = old.map((o) => o.id);

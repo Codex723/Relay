@@ -19,6 +19,14 @@ npm run dev   # web on :3000, api on :4000
 docker compose up --build   # Postgres on :5432, API on :4000
 ```
 
+## Web app (customer screens)
+`apps/web` is a Next.js app: vendors, menu, cart, checkout with a map pin, sign in, my orders, and live order tracking.
+- It talks to the API at `NEXT_PUBLIC_API_URL` (default `http://localhost:4000`). Next reads this from `apps/web/.env.local`, not from the root `.env`. It is baked in at build time, so rebuild after changing it.
+- Set the API's `WEB_ORIGIN` to the web app's address (default `http://localhost:3000`) so sign-in cookies and live updates are allowed.
+- Map tiles come from CARTO's free dark basemap (OpenStreetMap data). That is fine for development; check CARTO's and OpenStreetMap's usage terms, or use a paid tile provider, before real traffic.
+- Fonts (Anton, Inter, Playfair Display) load from Google Fonts at runtime and fall back to system fonts.
+- `npm test -w @relay/web` runs the unit tests. `apps/web/e2e/customer-flow.py` is a manual browser test of the whole journey.
+
 ## Secrets
 Generate both JWT secrets and put them in `.env`:
 ```bash
@@ -68,6 +76,7 @@ All status changes go through `transitionOrder` in `apps/api/src/orders/transiti
 ```bash
 npm test -w @relay/api   # needs a migrated database in DATABASE_URL
 ```
+Use a database just for tests (for example a second Docker database): the dispatch tests take every rider offline, so they would disturb a running demo.
 
 ## Database
 ```bash
